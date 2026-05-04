@@ -7,6 +7,7 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
+import time
 
 # ── Label extraction from filename ──────────────────────────────────────────
 def get_label(filename):
@@ -86,9 +87,16 @@ plt.show()
 best_k = k_values[accuracies.index(max(accuracies))]
 print(f"\n🏆 Best k: {best_k} with accuracy: {max(accuracies):.4f}")
 model = KNeighborsClassifier(n_neighbors=best_k)
-model.fit(X_train, y_train)
 
+start = time.time() # kNN training is just storing the data, but we'll time the fit() call for consistency
+model.fit(X_train, y_train)
+end = time.time()
+print(f"Training Time: {end - start:.2f} seconds")
+
+start = time.time() # kNN prediction can be slow, especially with larger datasets
 y_pred = model.predict(X_test)
+end = time.time()
+print(f"Prediction Time: {end - start:.2f} seconds")
 accuracy = accuracy_score(y_test, y_pred)
 
 print(f"🎯 kNN Test Accuracy: {accuracy * 100:.2f}%")

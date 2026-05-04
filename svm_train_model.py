@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
 from sklearn.metrics import roc_curve, auc
+import time
 
 # ── Label extraction from filename ──────────────────────────────────────────
 def get_label(filename):
@@ -107,10 +108,18 @@ plt.show()
 
 best_C = C_values[accuracies.index(max(accuracies))]
 model = SVC(C=best_C, kernel='rbf', probability=True)
+
+start = time.time() # SVM training can be time-consuming, especially with larger datasets
 model.fit(X_train, y_train)
+end = time.time()
+
+print(f"Training Time: {end - start:.2f} seconds")
 
 # ── Evaluate ─────────────────────────────────────────────────────────────────
+start = time.time() # SVM prediction is usually fast, but we'll time it anyway
 y_pred    = model.predict(X_test)
+end = time.time()
+print(f"Prediction Time: {end - start:.2f} seconds")
 accuracy  = accuracy_score(y_test, y_pred)
 
 print(f"\n🎯 SVM Test Accuracy: {accuracy * 100:.2f}%")
