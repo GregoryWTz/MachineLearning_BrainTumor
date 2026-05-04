@@ -7,6 +7,7 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
+from sklearn.metrics import roc_curve, auc
 
 # ── Label extraction from filename ──────────────────────────────────────────
 def get_label(filename):
@@ -88,7 +89,7 @@ print("\n🧠 Training SVM")
 C_values = [0.1, 1, 10]
 accuracies = []
 for c in C_values:
-    svm = SVC(kernel='rbf', C=c)
+    svm = SVC(kernel='rbf', C=c, probability=True)
     svm.fit(X_train, y_train)
 
     y_pred_c = svm.predict(X_test)
@@ -105,7 +106,7 @@ plt.ylabel("Accuracy")
 plt.show()
 
 best_C = C_values[accuracies.index(max(accuracies))]
-model = SVC(C=best_C, kernel='rbf')
+model = SVC(C=best_C, kernel='rbf', probability=True)
 model.fit(X_train, y_train)
 
 # ── Evaluate ─────────────────────────────────────────────────────────────────
@@ -166,3 +167,21 @@ graph_path = os.path.join(BASE_DIR, 'result_svm.png')
 plt.savefig(graph_path, dpi=150)
 plt.show()
 print(f"📈 Graph saved → {graph_path}")
+
+# ── ROC Curve — paste this AFTER the confusion matrix block ─────────────────
+y_prob = model.predict_proba(X_test)[:, 1]
+fpr, tpr, _ = roc_curve(y_test, y_prob)
+roc_auc = auc(fpr, tpr)
+
+plt.figure(figsize=(8, 6))
+plt.plot(fpr, tpr, color='darkorange', lw=2, label=f"ROC Curve (AUC = {roc_auc:.2f})")
+plt.plot([0, 1], [0, 1], color='navy', lw=1.5, linestyle='--', label="Random Classifier")
+plt.xlabel("False Positive Rate", fontsize=12)
+plt.ylabel("True Positive Rate", fontsize=12)
+plt.title("ROC Curve — Brain Tumor Detection (SVM)", fontsize=14, fontweight='bold')
+plt.legend(loc="lower right")
+plt.tight_layout()
+roc_path = os.path.join(BASE_DIR, 'result_roc.png')
+plt.savefig(roc_path, dpi=150)
+plt.show()
+print(f"📈 ROC Curve saved → {roc_path}")
