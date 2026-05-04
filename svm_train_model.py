@@ -49,7 +49,7 @@ X, y, class_names_list = [], [], []
 all_files = [f for f in os.listdir(data_dir)
              if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
 
-print(f"📂 Found {len(all_files)} image files i       dataset/")
+print(f"📂 Found {len(all_files)} image files in dataset/")
 
 for i, fname in enumerate(all_files, 1):
     label, class_name = get_label(fname)
