@@ -64,10 +64,30 @@ X_train, X_test, y_train, y_test = train_test_split(
 # ── Train kNN ────────────────────────────────────────────────────────────────
 print(f"\n🧠 Training kNN (k=3)...")
 # Note: kNN doesn't 'train' in the traditional sense, it just stores the data.
-model = KNeighborsClassifier(n_neighbors=3)
-model.fit(X_train, y_train)
+k_values = [1, 3, 5, 7, 9]
+accuracies = []
+
+for k in k_values:
+    knn = KNeighborsClassifier(n_neighbors=k)
+    knn.fit(X_train, y_train)
+    y_pred_k = knn.predict(X_test)
+    acc = accuracy_score(y_test, y_pred_k)
+    accuracies.append(acc)
+    print(f"k={k}, Accuracy={acc:.4f}")
+    
+plt.figure()
+plt.plot(k_values, accuracies, marker='o')
+plt.title("kNN Accuracy vs k")
+plt.xlabel("k")
+plt.ylabel("Accuracy")
+plt.show()
 
 # ── Evaluate ─────────────────────────────────────────────────────────────────
+best_k = k_values[accuracies.index(max(accuracies))]
+print(f"\n🏆 Best k: {best_k} with accuracy: {max(accuracies):.4f}")
+model = KNeighborsClassifier(n_neighbors=best_k)
+model.fit(X_train, y_train)
+
 y_pred = model.predict(X_test)
 accuracy = accuracy_score(y_test, y_pred)
 

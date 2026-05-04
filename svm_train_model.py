@@ -84,10 +84,29 @@ X_train, X_test, y_train, y_test = train_test_split(
 print(f"\n📊 Split → Train: {len(X_train)}  |  Test: {len(X_test)}")
 
 # ── Train SVM ────────────────────────────────────────────────────────────────
-print("\n🧠 Training SVM (this may take a while)...")
-model = SVC(kernel='rbf', probability=True, C=1.0)
+print("\n🧠 Training SVM")
+C_values = [0.1, 1, 10]
+accuracies = []
+for c in C_values:
+    svm = SVC(kernel='rbf', C=c)
+    svm.fit(X_train, y_train)
+
+    y_pred_c = svm.predict(X_test)
+    acc = accuracy_score(y_test, y_pred_c)
+
+    print(f"C={c}, Accuracy={acc:.4f}")
+    accuracies.append(acc)
+
+plt.figure()
+plt.plot(C_values, accuracies, marker='o')
+plt.title("SVM Accuracy vs C")
+plt.xlabel("C")
+plt.ylabel("Accuracy")
+plt.show()
+
+best_C = C_values[accuracies.index(max(accuracies))]
+model = SVC(C=best_C, kernel='rbf')
 model.fit(X_train, y_train)
-print("✅ Training complete!")
 
 # ── Evaluate ─────────────────────────────────────────────────────────────────
 y_pred    = model.predict(X_test)
