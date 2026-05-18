@@ -12,19 +12,7 @@ import time
 
 # ── Label extraction from filename ──────────────────────────────────────────
 def get_label(filename):
-    """
-    Returns (binary_label, class_name) based on filename prefix.
-    Te-gl  → glioma     → tumor (1)
-    Te-no  → no tumor   → no tumor (0)
-    Tr-no  → no tumor   → no tumor (0)
-    Tr-aug-me → meningioma → tumor (1)
-    Tr-me  → meningioma → tumor (1)
-    Tr-pi  → pituitary  → tumor (1)
-    Te-pi  → pituitary  → tumor (1)
-    Te-me  → meningioma → tumor (1)
-    """
     name = filename.lower()
-
     if 'no_' in name:
         return 0, 'No Tumor'
     elif 'gl_' in name:
@@ -34,16 +22,16 @@ def get_label(filename):
     elif 'pi_' in name:
         return 1, 'Pituitary'
     else:
-        return None, None  # unrecognized, will be skipped
+        return None, None
 
 # ── Config ───────────────────────────────────────────────────────────────────
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-data_dir  = os.path.join(BASE_DIR, 'dataset')   # ← single flat folder
+data_dir  = os.path.join(BASE_DIR, 'dataset')
 model_dir = os.path.join(BASE_DIR, 'models')
 os.makedirs(model_dir, exist_ok=True)
 
 IMG_SIZE  = 64
-TEST_SIZE = 0.30   # 70 / 30 split
+TEST_SIZE = 0.30
 
 # ── Load images ──────────────────────────────────────────────────────────────
 X, y, class_names_list = [], [], []
@@ -61,7 +49,8 @@ for i, fname in enumerate(all_files, 1):
 
     img_path  = os.path.join(data_dir, fname)
     img_array = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    if img_array is None: continue
+    if img_array is None:
+        continue
 
     resized = cv2.resize(img_array, (IMG_SIZE, IMG_SIZE))
     X.append(resized.flatten())
@@ -84,99 +73,87 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 print(f"\n📊 Split → Train: {len(X_train)}  |  Test: {len(X_test)}")
 
-# ── Train SVM ────────────────────────────────────────────────────────────────
+# ── Train SVM — search for best C ────────────────────────────────────────────
 print("\n🧠 Training SVM")
 C_values = [0.1, 1, 10]
 accuracies = []
+
 for c in C_values:
     svm = SVC(kernel='rbf', C=c, probability=True)
     svm.fit(X_train, y_train)
-
     y_pred_c = svm.predict(X_test)
     acc = accuracy_score(y_test, y_pred_c)
-
     print(f"C={c}, Accuracy={acc:.4f}")
     accuracies.append(acc)
 
-plt.figure()
-plt.plot(C_values, accuracies, marker='o')
-plt.title("SVM Accuracy vs C")
+plt.figure(figsize=(6, 4))
+plt.plot(C_values, accuracies, marker='o', color='steelblue')
+plt.title("SVM Accuracy vs C Value", fontweight='bold')
 plt.xlabel("C")
 plt.ylabel("Accuracy")
+plt.tight_layout()
+plt.savefig(os.path.join(BASE_DIR, 'result_svm_c_search.png'), dpi=150)
 plt.show()
 
 best_C = C_values[accuracies.index(max(accuracies))]
-model = SVC(C=best_C, kernel='rbf', probability=True)
+print(f"\n🏆 Best C: {best_C}")
 
-start = time.time() # SVM training can be time-consuming, especially with larger datasets
+# ── Train final model ─────────────────────────────────────────────────────────
+model = SVC(C=best_C, kernel='rbf', probability=True, class_weight='balanced')
+
+start = time.time()
 model.fit(X_train, y_train)
 end = time.time()
-
 print(f"Training Time: {end - start:.2f} seconds")
 
-# ── Evaluate ─────────────────────────────────────────────────────────────────
-start = time.time() # SVM prediction is usually fast, but we'll time it anyway
-y_pred    = model.predict(X_test)
+# ── Evaluate ──────────────────────────────────────────────────────────────────
+start = time.time()
+y_pred = model.predict(X_test)
 end = time.time()
 print(f"Prediction Time: {end - start:.2f} seconds")
-accuracy  = accuracy_score(y_test, y_pred)
 
+accuracy = accuracy_score(y_test, y_pred)
 print(f"\n🎯 SVM Test Accuracy: {accuracy * 100:.2f}%")
 print("\n📋 Classification Report:")
 print(classification_report(y_test, y_pred, target_names=['No Tumor', 'Tumor']))
+
+# ── Print sensitivity & specificity ──────────────────────────────────────────
+cm = confusion_matrix(y_test, y_pred)
+tn, fp, fn, tp = cm.ravel()
+sensitivity = tp / (tp + fn)
+specificity = tn / (tn + fp)
+print(f"🔬 Sensitivity (Recall for Tumor):   {sensitivity * 100:.2f}%")
+print(f"🔬 Specificity (Recall for No Tumor): {specificity * 100:.2f}%")
+print(f"🔬 False Negatives (missed tumors):   {fn}")
+print(f"🔬 False Positives (false alarms):    {fp}")
 
 # ── Save model ────────────────────────────────────────────────────────────────
 model_path = os.path.join(model_dir, 'svm_brain_tumor.pkl')
 joblib.dump(model, model_path)
 print(f"\n💾 Model saved → {model_path}")
 
-# ── Graphs ────────────────────────────────────────────────────────────────────
-# fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-# fig.suptitle('Brain Tumor Detection — SVM Results', fontsize=15, fontweight='bold')
-
-# ── Graphs (Confusion Matrix Only) ──────────────────────────────────────────
+# ── Confusion Matrix ──────────────────────────────────────────────────────────
 plt.figure(figsize=(8, 6))
 
-# 1) Confusion Matrix
-cm = confusion_matrix(y_test, y_pred)
-sns.heatmap(
-    cm, annot=True, fmt='d', cmap='Blues',
-    xticklabels=['No Tumor', 'Tumor'],
-    yticklabels=['No Tumor', 'Tumor'],
-    # ax=axes[0]
-)
-# axes[0].set_title('Confusion Matrix')
-# axes[0].set_xlabel('Predicted')
-# axes[0].set_ylabel('Actual')
+cm_percent = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
+labels = np.array([[f"{v}\n({p:.1f}%)" for v, p in zip(row_v, row_p)]
+                   for row_v, row_p in zip(cm, cm_percent)])
+
+sns.heatmap(cm, annot=labels, fmt='', cmap='Blues',
+            xticklabels=['No Tumor', 'Tumor'],
+            yticklabels=['No Tumor', 'Tumor'])
 
 plt.title('Confusion Matrix: Brain Tumor Detection (SVM)', fontsize=14, pad=20, fontweight='bold')
 plt.xlabel('Predicted Label', fontsize=12)
 plt.ylabel('Actual Label', fontsize=12)
-
-# 2) Class distribution bar chart
-# labels_display = ['No Tumor', 'Tumor']
-# train_counts   = [(y_train == 0).sum(), (y_train == 1).sum()]
-# test_counts    = [(y_test  == 0).sum(), (y_test  == 1).sum()]
-
-# x = np.arange(len(labels_display))
-# width = 0.35
-# axes[1].bar(x - width/2, train_counts, width, label='Train', color='steelblue')
-# axes[1].bar(x + width/2, test_counts,  width, label='Test',  color='coral')
-# axes[1].set_xticks(x)
-# axes[1].set_xticklabels(labels_display)
-# axes[1].set_title('Class Distribution (Train vs Test)')
-# axes[1].set_ylabel('Number of Images')
-# axes[1].legend()
-# axes[1].bar_label(axes[1].containers[0], padding=3)
-# axes[1].bar_label(axes[1].containers[1], padding=3)
-
 plt.tight_layout()
+
 graph_path = os.path.join(BASE_DIR, 'result_svm.png')
 plt.savefig(graph_path, dpi=150)
 plt.show()
-print(f"📈 Graph saved → {graph_path}")
+print(f"📈 Confusion matrix saved → {graph_path}")
 
-# ── ROC Curve — paste this AFTER the confusion matrix block ─────────────────
+# ── ROC Curve ─────────────────────────────────────────────────────────────────
 y_prob = model.predict_proba(X_test)[:, 1]
 fpr, tpr, _ = roc_curve(y_test, y_prob)
 roc_auc = auc(fpr, tpr)
@@ -189,7 +166,8 @@ plt.ylabel("True Positive Rate", fontsize=12)
 plt.title("ROC Curve — Brain Tumor Detection (SVM)", fontsize=14, fontweight='bold')
 plt.legend(loc="lower right")
 plt.tight_layout()
-roc_path = os.path.join(BASE_DIR, 'result_roc.png')
+
+roc_path = os.path.join(BASE_DIR, 'result_roc_svm.png')
 plt.savefig(roc_path, dpi=150)
 plt.show()
 print(f"📈 ROC Curve saved → {roc_path}")

@@ -7,14 +7,12 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
+from sklearn.metrics import roc_curve, auc
+from imblearn.over_sampling import RandomOverSampler
 import time
 
 # ── Label extraction from filename ──────────────────────────────────────────
 def get_label(filename):
-    """
-    Returns (binary_label, class_name) based on filename prefix.
-    Matches your previous SVM dataset structure.
-    """
     name = filename.lower()
     if 'no_' in name:
         return 0, 'No Tumor'
@@ -29,26 +27,29 @@ def get_label(filename):
 
 # ── Config ───────────────────────────────────────────────────────────────────
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-data_dir  = os.path.join(BASE_DIR, 'dataset') 
+data_dir  = os.path.join(BASE_DIR, 'dataset')
 model_dir = os.path.join(BASE_DIR, 'models')
 os.makedirs(model_dir, exist_ok=True)
 
-IMG_SIZE  = 64    # Kept at 64 for speed; kNN is slow with large images
-TEST_SIZE = 0.30 
+IMG_SIZE  = 64
+TEST_SIZE = 0.30
 
 # ── Load images ──────────────────────────────────────────────────────────────
 X, y = [], []
-all_files = [f for f in os.listdir(data_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+all_files = [f for f in os.listdir(data_dir)
+             if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
 
 print(f"📂 Found {len(all_files)} image files. Processing...")
 
 for fname in all_files:
     label, _ = get_label(fname)
-    if label is None: continue
+    if label is None:
+        continue
 
     img_path = os.path.join(data_dir, fname)
     img_array = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    if img_array is None: continue
+    if img_array is None:
+        continue
 
     resized = cv2.resize(img_array, (IMG_SIZE, IMG_SIZE))
     X.append(resized.flatten())
@@ -57,71 +58,116 @@ for fname in all_files:
 X = np.array(X) / 255.0
 y = np.array(y)
 
+print(f"\n✅ Dataset loaded — {len(X)} usable images")
+print(f"   Tumor: {y.sum()}  |  No Tumor: {(y==0).sum()}")
+
 # ── Train / Test split ───────────────────────────────────────────────────────
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=TEST_SIZE, random_state=42, stratify=y
 )
 
-# ── Train kNN ────────────────────────────────────────────────────────────────
+print(f"\n📊 Split → Train: {len(X_train)}  |  Test: {len(X_test)}")
+
+# ── Balance training set with oversampling ────────────────────────────────────
+ros = RandomOverSampler(random_state=42)
+X_train_balanced, y_train_balanced = ros.fit_resample(X_train, y_train)
+print(f"⚖️  After balancing → Train: {len(X_train_balanced)}")
+print(f"   Tumor: {y_train_balanced.sum()}  |  No Tumor: {(y_train_balanced==0).sum()}")
+
+# ── Train kNN — search for best k ─────────────────────────────────────────────
 print(f"\n🧠 Training kNN...")
-# Note: kNN doesn't 'train' in the traditional sense, it just stores the data.
 k_values = [1, 3, 5, 7, 9]
 accuracies = []
 
 for k in k_values:
     knn = KNeighborsClassifier(n_neighbors=k)
-    knn.fit(X_train, y_train)
+    knn.fit(X_train_balanced, y_train_balanced)
     y_pred_k = knn.predict(X_test)
     acc = accuracy_score(y_test, y_pred_k)
     accuracies.append(acc)
     print(f"k={k}, Accuracy={acc:.4f}")
-    
-plt.figure()
-plt.plot(k_values, accuracies, marker='o')
-plt.title("kNN Accuracy vs k")
+
+plt.figure(figsize=(6, 4))
+plt.plot(k_values, accuracies, marker='o', color='seagreen')
+plt.title("kNN Accuracy vs k Value", fontweight='bold')
 plt.xlabel("k")
 plt.ylabel("Accuracy")
+plt.tight_layout()
+plt.savefig(os.path.join(BASE_DIR, 'result_knn_k_search.png'), dpi=150)
 plt.show()
 
-# ── Evaluate ─────────────────────────────────────────────────────────────────
 best_k = k_values[accuracies.index(max(accuracies))]
 print(f"\n🏆 Best k: {best_k} with accuracy: {max(accuracies):.4f}")
+
+# ── Train final model ─────────────────────────────────────────────────────────
 model = KNeighborsClassifier(n_neighbors=best_k)
 
-start = time.time() # kNN training is just storing the data, but we'll time the fit() call for consistency
-model.fit(X_train, y_train)
+start = time.time()
+model.fit(X_train_balanced, y_train_balanced)
 end = time.time()
 print(f"Training Time: {end - start:.2f} seconds")
 
-start = time.time() # kNN prediction can be slow, especially with larger datasets
+start = time.time()
 y_pred = model.predict(X_test)
 end = time.time()
 print(f"Prediction Time: {end - start:.2f} seconds")
-accuracy = accuracy_score(y_test, y_pred)
 
+accuracy = accuracy_score(y_test, y_pred)
 print(f"🎯 kNN Test Accuracy: {accuracy * 100:.2f}%")
 print("\n📋 Classification Report:")
 print(classification_report(y_test, y_pred, target_names=['No Tumor', 'Tumor']))
 
+# ── Print sensitivity & specificity ──────────────────────────────────────────
+cm = confusion_matrix(y_test, y_pred)
+tn, fp, fn, tp = cm.ravel()
+sensitivity = tp / (tp + fn)
+specificity = tn / (tn + fp)
+print(f"🔬 Sensitivity (Recall for Tumor):    {sensitivity * 100:.2f}%")
+print(f"🔬 Specificity (Recall for No Tumor): {specificity * 100:.2f}%")
+print(f"🔬 False Negatives (missed tumors):   {fn}")
+print(f"🔬 False Positives (false alarms):    {fp}")
+
 # ── Save model ────────────────────────────────────────────────────────────────
 model_path = os.path.join(model_dir, 'knn_brain_tumor.pkl')
 joblib.dump(model, model_path)
+print(f"\n💾 Model saved → {model_path}")
 
-# ── Graph (Confusion Matrix Only) ───────────────────────────────────────────
+# ── Confusion Matrix ──────────────────────────────────────────────────────────
 plt.figure(figsize=(8, 6))
-cm = confusion_matrix(y_test, y_pred)
-sns.heatmap(
-    cm, annot=True, fmt='d', cmap='Greens', # Changed color to Green to distinguish from SVM
-    xticklabels=['No Tumor', 'Tumor'],
-    yticklabels=['No Tumor', 'Tumor']
-)
-plt.title('Confusion Matrix: Brain Tumor Detection (kNN)', fontsize=14, pad=20, fontweight='bold')
-plt.xlabel('Predicted')
-plt.ylabel('Actual')
 
+cm_percent = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
+labels = np.array([[f"{v}\n({p:.1f}%)" for v, p in zip(row_v, row_p)]
+                   for row_v, row_p in zip(cm, cm_percent)])
+
+sns.heatmap(cm, annot=labels, fmt='', cmap='Greens',
+            xticklabels=['No Tumor', 'Tumor'],
+            yticklabels=['No Tumor', 'Tumor'])
+
+plt.title('Confusion Matrix: Brain Tumor Detection (kNN)', fontsize=14, pad=20, fontweight='bold')
+plt.xlabel('Predicted Label', fontsize=12)
+plt.ylabel('Actual Label', fontsize=12)
 plt.tight_layout()
+
 graph_path = os.path.join(BASE_DIR, 'result_knn.png')
 plt.savefig(graph_path, dpi=150)
 plt.show()
+print(f"📈 Confusion matrix saved → {graph_path}")
 
-print(f"📈 Graph saved → {graph_path}")
+# ── ROC Curve ─────────────────────────────────────────────────────────────────
+y_prob = model.predict_proba(X_test)[:, 1]
+fpr, tpr, _ = roc_curve(y_test, y_prob)
+roc_auc = auc(fpr, tpr)
+
+plt.figure(figsize=(8, 6))
+plt.plot(fpr, tpr, color='seagreen', lw=2, label=f"ROC Curve (AUC = {roc_auc:.2f})")
+plt.plot([0, 1], [0, 1], color='navy', lw=1.5, linestyle='--', label="Random Classifier")
+plt.xlabel("False Positive Rate", fontsize=12)
+plt.ylabel("True Positive Rate", fontsize=12)
+plt.title("ROC Curve — Brain Tumor Detection (kNN)", fontsize=14, fontweight='bold')
+plt.legend(loc="lower right")
+plt.tight_layout()
+
+roc_path = os.path.join(BASE_DIR, 'result_roc_knn.png')
+plt.savefig(roc_path, dpi=150)
+plt.show()
+print(f"📈 ROC Curve saved → {roc_path}")
