@@ -1,8 +1,7 @@
 # This script normalizes image filenames in the "dataset" folder by:
 # 1. Removing "Tr" or "Te" prefixes
 # 2. Removing "aug-" prefixes
-# 3. Grouping by class name (e.g.,
-#    "glioma", "meningioma", "pituitary", "no_tumor")
+# 3. Grouping by class name (e.g., "glioma", "meningioma", "pituitary", "no_tumor")
 # 4. Renaming files to a consistent format: {class_name}_{number}.jpg
 #    where {number} is a continuous sequence for each class.
 
