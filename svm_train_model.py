@@ -61,8 +61,7 @@ for i, fname in enumerate(all_files, 1):
 
     img_path  = os.path.join(data_dir, fname)
     img_array = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    if img_array is None:
-        continue
+    if img_array is None: continue
 
     resized = cv2.resize(img_array, (IMG_SIZE, IMG_SIZE))
     X.append(resized.flatten())

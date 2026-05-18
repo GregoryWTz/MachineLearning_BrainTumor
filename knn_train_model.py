@@ -63,7 +63,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 # ── Train kNN ────────────────────────────────────────────────────────────────
-print(f"\n🧠 Training kNN (k=3)...")
+print(f"\n🧠 Training kNN...")
 # Note: kNN doesn't 'train' in the traditional sense, it just stores the data.
 k_values = [1, 3, 5, 7, 9]
 accuracies = []
