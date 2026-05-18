@@ -1,3 +1,16 @@
+# This script normalizes image filenames in the "dataset" folder by:
+# 1. Removing "Tr" or "Te" prefixes
+# 2. Removing "aug-" prefixes
+# 3. Grouping by class name (e.g.,
+#    "glioma", "meningioma", "pituitary", "no_tumor")
+# 4. Renaming files to a consistent format: {class_name}_{number}.jpg
+#    where {number} is a continuous sequence for each class.
+
+#How to use:
+# 1. Place this script in the same directory as the "dataset" folder.
+# 2. Make the dataset folder contain all your images (with any naming convention).
+# 3. Run this script. It will rename the files in place.
+
 import os
 import re
 from collections import defaultdict
